@@ -1,0 +1,19 @@
+import { API_BASE_URL } from "./api";
+
+/** Same host as the API, ws:// or wss:// to match its scheme. */
+export function websocketUrl(path: string): string {
+  const base = API_BASE_URL.replace(/^http/, "ws").replace(/\/$/, "");
+  return `${base}${path}`;
+}
+
+/**
+ * Reconnect delay with exponential backoff and jitter.
+ *
+ * The jitter matters more than usual here: if the server blips while a few
+ * hundred people are queued, a fixed delay would reconnect them all in the
+ * same instant and knock it over again.
+ */
+export function reconnectDelay(attempt: number): number {
+  const base = Math.min(1000 * 2 ** attempt, 15000);
+  return base * (0.7 + Math.random() * 0.6);
+}

@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+/* Light theme only, on purpose: the ticket counter and sold-out states carry
+   meaning through colour, and one palette keeps that legible everywhere. */
+:root {
+  --background: #ffffff;
+  --foreground: #0f172a; /* slate-900 */
+  --brand: #2563eb; /* blue-600 */
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-brand: var(--brand);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}

@@ -1,0 +1,69 @@
+# Version pinned to 2.4 so the file works with both the compose plugin and the
+# older standalone docker-compose binary (which needs it for depends_on.condition).
+version: "2.4"
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ticketing
+      POSTGRES_PASSWORD: ticketing
+      POSTGRES_DB: ticketing
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ticketing"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    # AOF so a restart does not silently drop a queue that people are sitting in.
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: ./backend
+      args:
+        INSTALL_DEV: "true"
+    command: python manage.py runserver 0.0.0.0:8000
+    env_file: .env
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.dev
+      DATABASE_URL: postgres://ticketing:ticketing@db:5432/ticketing
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Added in the async step: PDF rendering, storage upload, outbound email.
+  # worker:
+  #   build: { context: ./backend, args: { INSTALL_DEV: "true" } }
+  #   command: celery -A config worker -l info
+  #
+  # The single-consumer allocator that makes ticket handout strictly FIFO.
+  # allocator:
+  #   build: { context: ./backend, args: { INSTALL_DEV: "true" } }
+  #   command: python manage.py run_allocator
+
+volumes:
+  pgdata:
+  redisdata:
