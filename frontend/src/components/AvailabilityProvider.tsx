@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useRef, useState } from "react";
 
 import { getAvailability } from "@/lib/api";
 import type { Availability } from "@/lib/types";
-import { reconnectDelay, websocketUrl } from "@/lib/ws";
+import { reconnectDelay, startHeartbeat, websocketUrl } from "@/lib/ws";
 
 interface AvailabilityState {
   availability: Availability;
@@ -44,6 +44,7 @@ export function AvailabilityProvider({
   useEffect(() => {
     let socket: WebSocket | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let stopHeartbeat: (() => void) | null = null;
     let closed = false;
 
     const connect = () => {
@@ -52,6 +53,7 @@ export function AvailabilityProvider({
 
       socket.onopen = () => {
         setConnected(true);
+        stopHeartbeat = startHeartbeat(socket!);
         // Catch up on anything missed while we were away.
         if (attemptRef.current > 0) {
           getAvailability(slug).then(setAvailability).catch(() => {});
@@ -72,6 +74,7 @@ export function AvailabilityProvider({
 
       socket.onclose = () => {
         setConnected(false);
+        stopHeartbeat?.();
         if (closed) return;
         retryTimer = setTimeout(connect, reconnectDelay(attemptRef.current++));
       };
@@ -84,6 +87,7 @@ export function AvailabilityProvider({
     return () => {
       closed = true;
       if (retryTimer) clearTimeout(retryTimer);
+      stopHeartbeat?.();
       socket?.close();
     };
   }, [slug]);

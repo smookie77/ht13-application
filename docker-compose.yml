@@ -54,15 +54,61 @@ services:
       redis:
         condition: service_healthy
 
-  # Added in the async step: PDF rendering, storage upload, outbound email.
-  # worker:
-  #   build: { context: ./backend, args: { INSTALL_DEV: "true" } }
-  #   command: celery -A config worker -l info
-  #
-  # The single-consumer allocator that makes ticket handout strictly FIFO.
-  # allocator:
-  #   build: { context: ./backend, args: { INSTALL_DEV: "true" } }
-  #   command: python manage.py run_allocator
+  # The single consumer that makes ticket handout strictly first-come
+  # first-served. Run exactly ONE per event: fairness comes from there being
+  # one popper. Scaling this to 2 replicas would still not oversell (the
+  # conditional UPDATE holds) but would lose strict ordering.
+  allocator:
+    build:
+      context: ./backend
+      args:
+        INSTALL_DEV: "true"
+    command: python manage.py run_allocator --event hack-tues-13
+    env_file: .env
+    environment: &backend_env
+      DJANGO_SETTINGS_MODULE: config.settings.dev
+      DATABASE_URL: postgres://ticketing:ticketing@db:5432/ticketing
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Off-request work: expiring abandoned holds now, PDF rendering and email
+  # delivery in the next step.
+  worker:
+    build:
+      context: ./backend
+      args:
+        INSTALL_DEV: "true"
+    command: celery -A config worker -l info
+    env_file: .env
+    environment: *backend_env
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Scheduler: fires expire_stale_holds every minute.
+  beat:
+    build:
+      context: ./backend
+      args:
+        INSTALL_DEV: "true"
+    command: celery -A config beat -l info
+    env_file: .env
+    environment: *backend_env
+    volumes:
+      - ./backend:/app
+    depends_on:
+      redis:
+        condition: service_healthy
 
 volumes:
   pgdata:

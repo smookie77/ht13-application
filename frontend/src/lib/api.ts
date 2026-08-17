@@ -1,4 +1,4 @@
-import type { Availability, EventDetail, Reservation, User } from "./types";
+import type { Availability, EventDetail, Reservation, Ticket, User } from "./types";
 
 /**
  * Base URL of the Django API.
@@ -156,4 +156,23 @@ export function confirmReservation(publicId: string): Promise<Reservation> {
 
 export function cancelReservation(publicId: string): Promise<Reservation> {
   return request(`/api/reservations/${publicId}/cancel/`, { method: "POST" });
+}
+
+// --- Tickets -----------------------------------------------------------------
+
+export function listTickets(): Promise<{ results: Ticket[] }> {
+  return request("/api/tickets/");
+}
+
+/**
+ * Absolute URL for the download endpoint. The browser is sent there directly so
+ * the session cookie rides along and the API can redirect to a signed storage
+ * URL - the bucket itself is never public.
+ */
+export function ticketDownloadUrl(code: string): string {
+  return `${API_BASE_URL}/api/tickets/${code}/download/`;
+}
+
+export function checkInTicket(code: string): Promise<Ticket> {
+  return request("/api/tickets/check-in/", { method: "POST", body: { code } });
 }

@@ -1,5 +1,6 @@
 from django.db.models import Prefetch
-from rest_framework import mixins, viewsets
+from drf_spectacular.utils import extend_schema, inline_serializer
+from rest_framework import mixins, serializers, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -13,6 +14,7 @@ from .serializers import (
 )
 
 
+@extend_schema(responses=inline_serializer("Health", {"status": serializers.CharField()}))
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def health(request):
@@ -41,6 +43,7 @@ class EventViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.Ge
     def get_serializer_class(self):
         return EventListSerializer if self.action == "list" else EventDetailSerializer
 
+    @extend_schema(responses={200: AvailabilitySerializer})
     @action(detail=True, methods=["get"])
     def availability(self, request, slug=None):
         """Current stock. The SPA uses this for the initial render and then

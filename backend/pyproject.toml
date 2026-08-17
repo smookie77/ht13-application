@@ -10,3 +10,6 @@ select = ["E", "F", "I", "UP", "B", "DJ"]
 DJANGO_SETTINGS_MODULE = "config.settings.test"
 python_files = ["test_*.py", "tests.py"]
 addopts = "-q"
+# Consumer tests are coroutines; no per-test marker needed.
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"

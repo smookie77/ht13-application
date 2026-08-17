@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { cancelReservation, confirmReservation, errorMessage, getReservation } from "@/lib/api";
 import type { Reservation } from "@/lib/types";
-import { reconnectDelay, websocketUrl } from "@/lib/ws";
+import { reconnectDelay, startHeartbeat, websocketUrl } from "@/lib/ws";
 
 /**
  * Live view of one reservation as it moves through the queue.
@@ -32,6 +32,7 @@ export function QueueTracker({ initial }: { initial: Reservation }) {
   useEffect(() => {
     let socket: WebSocket | null = null;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let stopHeartbeat: (() => void) | null = null;
     let closed = false;
 
     const connect = () => {
@@ -40,6 +41,7 @@ export function QueueTracker({ initial }: { initial: Reservation }) {
 
       socket.onopen = () => {
         setConnected(true);
+        stopHeartbeat = startHeartbeat(socket!);
         if (attemptRef.current > 0) {
           getReservation(publicId).then(apply).catch(() => {});
         }
@@ -62,6 +64,7 @@ export function QueueTracker({ initial }: { initial: Reservation }) {
 
       socket.onclose = () => {
         setConnected(false);
+        stopHeartbeat?.();
         if (closed) return;
         retryTimer = setTimeout(connect, reconnectDelay(attemptRef.current++));
       };
@@ -73,6 +76,7 @@ export function QueueTracker({ initial }: { initial: Reservation }) {
     return () => {
       closed = true;
       if (retryTimer) clearTimeout(retryTimer);
+      stopHeartbeat?.();
       socket?.close();
     };
   }, [publicId, apply]);
@@ -245,15 +249,15 @@ function Confirmed() {
       </p>
       <h2 className="mt-3 text-2xl font-bold">Your tickets are yours</h2>
       <p className="mt-3 text-slate-600">
-        The PDF ticket and confirmation email arrive in the next step of this
-        project — for now the reservation is safely recorded.
+        The PDF ticket is on its way to your inbox. It is also available to
+        download from your account at any time.
       </p>
       <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
         <Link
           href="/account"
           className="rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white transition hover:bg-blue-700"
         >
-          My reservations
+          Go to my tickets
         </Link>
       </div>
     </div>

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useAuth } from "@/components/AuthProvider";
+import { TicketList } from "@/components/TicketList";
 import { errorMessage, listReservations } from "@/lib/api";
 import { formatDate, formatTime } from "@/lib/format";
 import type { Reservation, ReservationStatus } from "@/lib/types";
@@ -77,6 +78,9 @@ export default function AccountPage() {
           </Link>
         </div>
       )}
+
+      <h2 className="mt-12 text-xl font-bold tracking-tight">My tickets</h2>
+      <TicketList />
 
       <h2 className="mt-12 text-xl font-bold tracking-tight">My reservations</h2>
 

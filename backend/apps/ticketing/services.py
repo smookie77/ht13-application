@@ -158,11 +158,21 @@ def confirm_reservation(reservation: Reservation) -> Reservation:
             locked.status = ReservationStatus.CONFIRMED
             locked.confirmed_at = timezone.now()
             locked.save(update_fields=["status", "confirmed_at"])
+            # Rendering, uploading and emailing take seconds and touch two
+            # third parties, so they happen off the request path - and only
+            # once the payment is durably committed.
+            transaction.on_commit(lambda: _queue_ticket_issue(locked))
 
     if expired:
         raise ReservationError("Your hold expired. Please try again.")
 
     return locked
+
+
+def _queue_ticket_issue(reservation: Reservation) -> None:
+    from .tasks import issue_tickets
+
+    issue_tickets.delay(str(reservation.public_id))
 
 
 @transaction.atomic

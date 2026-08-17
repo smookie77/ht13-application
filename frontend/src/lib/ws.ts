@@ -17,3 +17,22 @@ export function reconnectDelay(attempt: number): number {
   const base = Math.min(1000 * 2 ** attempt, 15000);
   return base * (0.7 + Math.random() * 0.6);
 }
+
+/** Well under the ~100s that Cloudflare and most proxies allow a socket to idle. */
+export const HEARTBEAT_INTERVAL_MS = 30_000;
+
+/**
+ * Keep a socket from being culled for inactivity.
+ *
+ * A queue can sit quiet for minutes between allocations, and a proxy that drops
+ * the connection would leave someone staring at a frozen position. Returns a
+ * cleanup function.
+ */
+export function startHeartbeat(socket: WebSocket): () => void {
+  const id = setInterval(() => {
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: "ping" }));
+    }
+  }, HEARTBEAT_INTERVAL_MS);
+  return () => clearInterval(id);
+}

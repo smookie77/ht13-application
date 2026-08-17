@@ -20,7 +20,23 @@ from .realtime import event_group, reservation_group
 logger = logging.getLogger(__name__)
 
 
-class AvailabilityConsumer(AsyncJsonWebsocketConsumer):
+class HeartbeatMixin:
+    """Answer client pings.
+
+    Reverse proxies - Cloudflare among them - drop WebSockets that go quiet for
+    a couple of minutes, and a queue can easily be idle that long between
+    allocations. The client pings periodically; this keeps the connection
+    counted as active. Anything else the client sends is ignored: these sockets
+    are read-only, and every state change goes through the authenticated HTTP
+    API.
+    """
+
+    async def receive_json(self, content, **kwargs):
+        if isinstance(content, dict) and content.get("type") == "ping":
+            await self.send_json({"type": "pong"})
+
+
+class AvailabilityConsumer(HeartbeatMixin, AsyncJsonWebsocketConsumer):
     """Live ticket counts for one event. Public - no login needed."""
 
     async def connect(self):
@@ -60,7 +76,7 @@ class AvailabilityConsumer(AsyncJsonWebsocketConsumer):
         return payload
 
 
-class ReservationConsumer(AsyncJsonWebsocketConsumer):
+class ReservationConsumer(HeartbeatMixin, AsyncJsonWebsocketConsumer):
     """Live status of one reservation: queue position, then the verdict.
 
     Authorisation matters here - this stream reveals order state, so the socket

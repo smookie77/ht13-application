@@ -76,7 +76,26 @@ TEMPLATES = [
 ]
 
 DATABASES = {"default": env.db("DATABASE_URL")}
-DATABASES["default"]["CONN_MAX_AGE"] = env.int("DATABASE_CONN_MAX_AGE", default=60)
+
+# A connection pool, not persistent connections.
+#
+# Under a sales spike every worker thread wants a connection at once. With
+# `CONN_MAX_AGE` each one holds its own until it times out, and Postgres hits
+# `too many clients already` - which is exactly the failure mode this system is
+# supposed to survive. A bounded pool caps what one process can consume and
+# hands connections back immediately.
+#
+# Django treats persistent connections and pooling as mutually exclusive, so
+# CONN_MAX_AGE must stay 0 here.
+DATABASES["default"]["CONN_MAX_AGE"] = 0
+DATABASES["default"]["OPTIONS"] = {
+    **DATABASES["default"].get("OPTIONS", {}),
+    "pool": {
+        "min_size": env.int("DB_POOL_MIN_SIZE", default=2),
+        "max_size": env.int("DB_POOL_MAX_SIZE", default=10),
+        "timeout": env.int("DB_POOL_TIMEOUT", default=10),
+    },
+}
 
 REDIS_URL = env("REDIS_URL", default="redis://localhost:6379/0")
 
@@ -162,6 +181,21 @@ EMAIL_SENDER_CLASS = env(
 )
 RESEND_API_KEY = env("RESEND_API_KEY", default="")
 EMAIL_FROM = env("EMAIL_FROM", default="tickets@example.com")
+
+# Ticket PDFs. The bucket is private; downloads go through an authenticated
+# view that redirects to a short-lived signed URL.
+TICKET_STORAGE_CLASS = env(
+    "TICKET_STORAGE_CLASS",
+    default="apps.integrations.storage.local.LocalTicketStorage",
+)
+TICKET_URL_TTL_SECONDS = env.int("TICKET_URL_TTL_SECONDS", default=300)
+R2_ACCOUNT_ID = env("R2_ACCOUNT_ID", default="")
+R2_ACCESS_KEY_ID = env("R2_ACCESS_KEY_ID", default="")
+R2_SECRET_ACCESS_KEY = env("R2_SECRET_ACCESS_KEY", default="")
+R2_BUCKET_NAME = env("R2_BUCKET_NAME", default="")
+
+MEDIA_ROOT = env("MEDIA_ROOT", default=str(BASE_DIR / "media"))
+MEDIA_URL = "media/"
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "Ticketing API",

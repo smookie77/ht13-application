@@ -4,6 +4,10 @@ Exercises the real HTTP surface the SPA uses: register, verify, log in, join
 the queue, get allocated by the allocator process, then pay. Also asserts the
 fairness property under concurrency.
 
+This script *is* the allocator for the duration of the run - it drains the
+queue itself so it can assert on the state in between. Stop any separate
+`run_allocator` process first, or the two will race for the same queue.
+
 Usage (with the API and Redis up):
     .venv/bin/python scripts/e2e_check.py
 """
@@ -24,10 +28,10 @@ django.setup()
 from django.contrib.auth import get_user_model  # noqa: E402
 from django.utils import timezone  # noqa: E402
 
+from apps.accounts import tokens  # noqa: E402
 from apps.events.models import Event, TicketType  # noqa: E402
 from apps.ticketing import queue  # noqa: E402
 from apps.ticketing.models import Reservation, ReservationStatus  # noqa: E402
-from apps.accounts import tokens  # noqa: E402
 
 API = "http://localhost:8000"
 PASSWORD = "s3cure-passphrase!"
@@ -122,7 +126,13 @@ def test_fairness_under_load(tier_name="VIP", stock=5, buyers=40):
     accepted = codes.count(202)
     assert accepted == buyers, f"only {accepted}/{buyers} accepted: {set(codes)}"
     ok(f"all {buyers} requests accepted with 202 (nobody rejected at the door)")
-    assert TicketType.objects.get(pk=tier.pk).quantity_available == stock
+
+    remaining = TicketType.objects.get(pk=tier.pk).quantity_available
+    assert remaining == stock, (
+        f"stock already moved ({remaining} left, expected {stock}). "
+        "Is a separate `manage.py run_allocator` running? This script drains "
+        "the queue itself and cannot share it."
+    )
     ok("no stock touched yet - the web tier never decrements")
     assert queue.queue_length(event.id) == buyers
     ok(f"{buyers} people waiting in the Redis line")
@@ -179,6 +189,8 @@ def check_payment(reservation):
     assert r.json()["status"] == "confirmed"
     ok("payment confirmed")
 
+    check_ticket_delivery(c, reservation)
+
     # Someone else must not be able to read it.
     other = User.objects.exclude(pk=reservation.user.pk).filter(
         email__startswith="load-"
@@ -189,10 +201,50 @@ def check_payment(reservation):
     ok("another user cannot read it (404)")
 
 
+def check_ticket_delivery(client, reservation):
+    """The PDF path: minted, rendered, stored and downloadable by its owner."""
+    print("\n[5] PDF ticket, storage and delivery")
+    from apps.ticketing import issuing
+
+    # Celery is not running in this check, so the task body is invoked directly.
+    tickets = issuing.issue_tickets(Reservation.objects.get(pk=reservation.pk))
+    assert len(tickets) == reservation.quantity
+    ok(f"{len(tickets)} ticket(s) minted, one per admission")
+
+    again = issuing.issue_tickets(Reservation.objects.get(pk=reservation.pk))
+    assert {t.code for t in again} == {t.code for t in tickets}
+    ok("re-running the task is idempotent - no duplicate tickets")
+
+    for ticket in tickets:
+        ticket.refresh_from_db()
+        assert ticket.pdf_key, "ticket was never stored"
+        assert ticket.emailed_at is not None, "ticket was never emailed"
+    ok("every ticket is stored in object storage and marked as sent")
+
+    code = tickets[0].code
+    r = client.get(f"/api/tickets/{code}/download/")
+    assert r.status_code == 200, r.status_code
+    assert r.content.startswith(b"%PDF-"), r.content[:20]
+    ok(f"owner downloaded a real PDF ({len(r.content)} bytes)")
+
+    other = User.objects.exclude(pk=reservation.user.pk).filter(
+        email__startswith="load-"
+    ).first()
+    r = client_for(other.email).get(f"/api/tickets/{code}/download/")
+    assert r.status_code == 404, f"leaked another user's ticket: {r.status_code}"
+    ok("another user cannot download it (404)")
+
+    r = client.post("/api/tickets/check-in/", json={"code": code})
+    assert r.status_code == 403, r.status_code
+    ok("a non-staff buyer cannot check tickets in (403)")
+
+    return code
+
+
 async def check_websocket(event_slug, tier_id, tier_available):
     """ORM objects are resolved by the caller: this coroutine runs in an async
     context, where synchronous queries are not allowed."""
-    print("\n[5] WebSocket live counter")
+    print("\n[6] WebSocket live counter")
     import json
 
     import websockets

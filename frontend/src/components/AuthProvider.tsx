@@ -32,19 +32,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const refresh = useCallback(async () => {
+  /** 403 simply means nobody is signed in, so it resolves to null. */
+  const loadUser = useCallback(async (): Promise<User | null> => {
     try {
-      setUser(await api.me());
+      return await api.me();
     } catch {
-      setUser(null); // 403 simply means nobody is signed in
-    } finally {
-      setLoading(false);
+      return null;
     }
   }, []);
 
+  const refresh = useCallback(async () => {
+    setUser(await loadUser());
+    setLoading(false);
+  }, [loadUser]);
+
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    let cancelled = false;
+    (async () => {
+      const current = await loadUser();
+      // Guard against a state update after the provider has unmounted.
+      if (cancelled) return;
+      setUser(current);
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadUser]);
 
   const signIn = useCallback(async (email: string, password: string) => {
     const signedIn = await api.login({ email, password });

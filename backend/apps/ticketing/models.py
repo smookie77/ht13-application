@@ -82,3 +82,67 @@ class Reservation(models.Model):
         if self.status != ReservationStatus.ALLOCATED or not self.expires_at:
             return None
         return max(0, int((self.expires_at - timezone.now()).total_seconds()))
+
+
+def generate_ticket_code() -> str:
+    """A short, unguessable, human-readable code.
+
+    It is printed on the ticket and encoded in the QR, so it has to survive
+    being read aloud or typed at the door: uppercase base32 without the
+    characters people confuse (0/O, 1/I). 20 chars of that alphabet is ~93 bits
+    of entropy, far past guessing.
+    """
+    import secrets
+
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    raw = "".join(secrets.choice(alphabet) for _ in range(20))
+    return "-".join(raw[i : i + 5] for i in range(0, 20, 5))
+
+
+class Ticket(models.Model):
+    """One admission, issued after payment.
+
+    A row per admission rather than per order: each person through the door
+    scans their own QR, and a group booking of four needs four codes.
+    """
+
+    code = models.CharField(
+        max_length=32, unique=True, default=generate_ticket_code, editable=False
+    )
+    reservation = models.ForeignKey(
+        Reservation, related_name="tickets", on_delete=models.CASCADE
+    )
+
+    # Denormalised from the buyer at issue time: the PDF is a historical
+    # document, so renaming an account later must not change an issued ticket.
+    holder_name = models.CharField(max_length=150)
+
+    # Key in object storage, not a URL - URLs are signed on demand and expire.
+    pdf_key = models.CharField(max_length=300, blank=True)
+
+    issued_at = models.DateTimeField(auto_now_add=True)
+    emailed_at = models.DateTimeField(null=True, blank=True)
+
+    checked_in_at = models.DateTimeField(null=True, blank=True)
+    checked_in_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        related_name="checked_in_tickets",
+        on_delete=models.SET_NULL,
+    )
+
+    class Meta:
+        ordering = ["issued_at"]
+        indexes = [models.Index(fields=["reservation"])]
+
+    def __str__(self):
+        return self.code
+
+    @property
+    def is_checked_in(self) -> bool:
+        return self.checked_in_at is not None
+
+    @property
+    def storage_key(self) -> str:
+        return f"tickets/{self.reservation.event_id}/{self.code}.pdf"

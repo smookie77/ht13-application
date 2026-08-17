@@ -1,3 +1,5 @@
+import { connection } from "next/server";
+
 import { ApiError, getAvailability, getEvent } from "./api";
 import type { Availability, EventDetail } from "./types";
 
@@ -13,6 +15,12 @@ export type EventLoadResult =
  * fetch-and-degrade behaviour lives in exactly one place.
  */
 export async function loadFeaturedEvent(): Promise<EventLoadResult> {
+  // Stop prerendering here. Without this, Next renders these pages at build
+  // time: ticket counts would be frozen at whatever the stock was when the
+  // image was built, and a build run where the API is unreachable would bake
+  // the error page into static HTML.
+  await connection();
+
   try {
     const [event, availability] = await Promise.all([
       getEvent(FEATURED_EVENT_SLUG),

@@ -71,6 +71,22 @@ export type ReservationStatus =
   | "expired"
   | "cancelled";
 
+export interface Ticket {
+  code: string;
+  holder_name: string;
+  event_title: string;
+  event_slug: string;
+  ticket_type_name: string;
+  starts_at: string;
+  venue_name: string;
+  issued_at: string;
+  emailed_at: string | null;
+  is_checked_in: boolean;
+  checked_in_at: string | null;
+  /** Path on the API; always go through it rather than a raw storage URL. */
+  download_url: string;
+}
+
 export interface Reservation {
   public_id: string;
   event_slug: string;
