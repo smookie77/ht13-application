@@ -3,6 +3,8 @@
 A ticket sales system built to survive the moment sales open: hundreds of people
 hitting *Buy* at the same second for a limited number of tickets.
 
+Hosted right now at [https://smookie77.org](https://smookie77.org)
+
 ## The core problem
 
 Everything else here is routine CRUD. The interesting requirement is:
