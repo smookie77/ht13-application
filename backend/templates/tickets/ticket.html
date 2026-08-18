@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{{ event.title }} — ticket {{ ticket.code }}</title>
+  <style>
+    /* A5 landscape reads like a real ticket stub and prints on A4 without
+       scaling surprises. */
+    @page { size: A5 landscape; margin: 0; }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Helvetica", "Arial", sans-serif;
+      color: #0f172a;
+      hyphens: none;
+    }
+
+    .ticket { display: flex; height: 148mm; width: 210mm; }
+
+    /* WeasyPrint's flexbox support is partial - nesting a flex grid inside a
+       flex column made the layout collapse onto a second page. The fine print
+       is therefore pinned to the bottom edge instead. */
+    .main { flex: 1; padding: 14mm 12mm; position: relative; }
+    .terms {
+      position: absolute;
+      left: 12mm;
+      right: 12mm;
+      bottom: 10mm;
+      border-top: 1px solid #e2e8f0;
+      padding-top: 3mm;
+      font-size: 7.5pt;
+      color: #94a3b8;
+      line-height: 1.5;
+    }
+    .stub {
+      width: 62mm;
+      border-left: 2px dashed #cbd5e1;
+      padding: 14mm 8mm;
+      background: #f8fafc;
+      text-align: center;
+    }
+
+    .brand { font-size: 9pt; letter-spacing: 2pt; text-transform: uppercase; color: #2563eb; font-weight: bold; }
+    h1 { font-size: 26pt; margin: 5mm 0 2mm; line-height: 1.1; }
+    .tagline { font-size: 11pt; color: #475569; margin: 0 0 8mm; }
+
+    .grid { display: flex; flex-wrap: wrap; }
+    .field { width: 50%; margin-bottom: 6mm; }
+    .label { font-size: 7.5pt; text-transform: uppercase; letter-spacing: 1pt; color: #94a3b8; }
+    .value { font-size: 12pt; font-weight: bold; margin-top: 1mm; }
+    .value small { display: block; font-size: 9pt; font-weight: normal; color: #475569; margin-top: 0.5mm; }
+
+    .tier {
+      display: inline-block;
+      background: #2563eb;
+      color: #fff;
+      font-size: 10pt;
+      font-weight: bold;
+      padding: 2mm 4mm;
+      border-radius: 2mm;
+    }
+
+    .qr { width: 42mm; height: 42mm; }
+    .code {
+      font-family: "Courier New", monospace;
+      font-size: 12pt;
+      font-weight: bold;
+      letter-spacing: 1pt;
+      margin-top: 4mm;
+      word-break: break-all;
+    }
+    .stub .label { margin-top: 6mm; }
+    .note { font-size: 7.5pt; color: #94a3b8; margin-top: 6mm; line-height: 1.4; }
+  </style>
+</head>
+<body>
+  <div class="ticket">
+    <div class="main">
+      <div class="brand">{{ event.city }} · {{ starts_at_date }}</div>
+      <h1>{{ event.title }}</h1>
+      {% if event.tagline %}<p class="tagline">{{ event.tagline }}</p>{% endif %}
+
+      <div><span class="tier">{{ ticket_type.name }}</span></div>
+
+      <div class="grid" style="margin-top: 8mm;">
+        <div class="field">
+          <div class="label">Ticket holder</div>
+          <div class="value">{{ ticket.holder_name }}</div>
+        </div>
+        <div class="field">
+          <div class="label">Admits</div>
+          <div class="value">1 person</div>
+        </div>
+        <div class="field">
+          <div class="label">When</div>
+          <div class="value">
+            {{ starts_at_date }}
+            <small>
+              {% if doors_open_time %}Doors {{ doors_open_time }} · {% endif %}Starts {{ starts_at_time }}
+            </small>
+          </div>
+        </div>
+        <div class="field">
+          <div class="label">Where</div>
+          <div class="value">
+            {{ event.venue_name }}
+            <small>{{ event.venue_address }}{% if event.venue_address %}, {% endif %}{{ event.city }}</small>
+          </div>
+        </div>
+        {% if seat_label %}
+        <div class="field">
+          <div class="label">Seat</div>
+          <div class="value">{{ seat_label }}</div>
+        </div>
+        {% endif %}
+        <div class="field">
+          <div class="label">Order</div>
+          <div class="value"><small>{{ reservation.public_id }}</small></div>
+        </div>
+      </div>
+
+      <div class="terms">
+        Keep this ticket safe — anyone holding the QR code can be admitted in your
+        place. Entry closes 30 minutes after the start. This ticket is not
+        transferable and cannot be resold.
+      </div>
+    </div>
+
+    <div class="stub">
+      <div class="label" style="margin-top: 0;">Scan at the door</div>
+      <img class="qr" src="{{ qr_data_uri }}" alt="Ticket QR code">
+      <div class="code">{{ ticket.code }}</div>
+      <div class="label">Issued</div>
+      <div style="font-size: 9pt;">{{ issued_at }}</div>
+      <p class="note">
+        This ticket is personal and admits one person. The name is checked
+        against ID at the entrance.
+      </p>
+    </div>
+  </div>
+</body>
+</html>
